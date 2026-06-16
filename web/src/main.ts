@@ -28,7 +28,10 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// Minimal JSON pretty-printer with syntax classes.
+// Minimal JSON pretty-printer with syntax classes. Long arrays (e.g. 30 bars
+// of candle history) are truncated to keep the panel readable while still
+// showing the real shape.
+const MAX_ARR = 3;
 function renderJson(value: unknown, indent = 0): string {
   const pad = "  ".repeat(indent);
   const padIn = "  ".repeat(indent + 1);
@@ -38,8 +41,12 @@ function renderJson(value: unknown, indent = 0): string {
   if (typeof value === "string") return `<span class="j-str">"${esc(value)}"</span>`;
   if (Array.isArray(value)) {
     if (value.length === 0) return "[]";
-    const items = value.map((v) => padIn + renderJson(v, indent + 1)).join(",\n");
-    return `[\n${items}\n${pad}]`;
+    const show = value.length > MAX_ARR ? value.slice(0, 2) : value;
+    const lines = show.map((v) => padIn + renderJson(v, indent + 1));
+    if (value.length > MAX_ARR) {
+      lines.push(`${padIn}<span class="j-null">... ${value.length - 2} more (${value.length} total)</span>`);
+    }
+    return `[\n${lines.join(",\n")}\n${pad}]`;
   }
   const obj = value as Record<string, unknown>;
   const keys = Object.keys(obj);
