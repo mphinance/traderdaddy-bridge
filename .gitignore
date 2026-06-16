@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build output (deployed to gh-pages separately)
+web/dist/
+
+# playwright
+test-results/
+playwright-report/
+.cache/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# os / editor
+.DS_Store
+Thumbs.db
+*.log
+
+# secrets never enter git
+secrets.env
+.env
+*.token
