@@ -45,6 +45,31 @@ RAW_TRADIER = {
             }
         }
     },
+    # /markets/options/chains?greeks=true. This IS the canonical chain shape.
+    "chains": {
+        "options": {
+            "option": [
+                {
+                    "symbol": "AAPL260619C00190000",
+                    "description": "AAPL Jun 19 2026 $190.00 Call",
+                    "underlying": "AAPL",
+                    "strike": 190.0,
+                    "option_type": "call",
+                    "expiration_date": "2026-06-19",
+                    "bid": 5.10,
+                    "ask": 5.30,
+                    "last": 5.20,
+                    "greeks": {
+                        "delta": 0.55,
+                        "gamma": 0.03,
+                        "theta": -0.08,
+                        "vega": 0.12,
+                        "mid_iv": 0.286,
+                    },
+                }
+            ]
+        }
+    },
 }
 
 
@@ -238,6 +263,99 @@ RAW_IBKR = {
 }
 
 
+# --- massive.com (Polygon.io rebranded): market DATA feed, NO accounts. --------
+# Terse snapshot keys: lastTrade.p = last, lastQuote.p = bid, lastQuote.P = ask,
+# day.v = volume. Options chain snapshot carries native greeks and an "O:" OCC.
+# Daily candles arrive from the aggregates endpoint (added in the history block).
+RAW_MASSIVE = {
+    "snapshot": {
+        "ticker": {
+            "ticker": "AAPL",
+            "lastTrade": {"p": 190.00, "s": 100, "x": 4, "t": 1750000000000000000},
+            "lastQuote": {
+                "P": 190.05,  # ask price
+                "S": 3,       # ask size
+                "p": 189.95,  # bid price
+                "s": 2,       # bid size
+                "t": 1750000000000000000,
+            },
+            "day": {"o": 188.0, "h": 191.0, "l": 187.5, "c": 190.0, "v": 51234567, "vw": 189.6},
+        }
+    },
+    "option_chain": {
+        "results": [
+            {
+                "ticker": "O:AAPL260619C00190000",
+                "details": {
+                    "contract_type": "call",
+                    "exercise_style": "american",
+                    "expiration_date": "2026-06-19",
+                    "strike_price": 190.0,
+                    "shares_per_contract": 100,
+                    "underlying_ticker": "AAPL",
+                },
+                "last_quote": {"bid": 5.10, "bid_size": 40, "ask": 5.30, "ask_size": 55, "midpoint": 5.20},
+                "last_trade": {"price": 5.20, "size": 3},
+                "greeks": {"delta": 0.55, "gamma": 0.03, "theta": -0.08, "vega": 0.12},
+                "implied_volatility": 0.286,
+                "open_interest": 12345,
+                "underlying_asset": {"ticker": "AAPL", "price": 190.0},
+            }
+        ]
+    },
+}
+
+
+# --- Databento: raw market DATA feed, NO accounts. The most divergent shape. ---
+# Prices are int64 scaled 1e-9. Records carry a numeric instrument_id resolved by
+# the symbology map. TBBO carries the trade plus top of book; option metadata
+# comes from the definition schema. Daily candles (OHLCV-1d) added below.
+RAW_DATABENTO = {
+    "symbology": {
+        "9001": "AAPL",
+        "55001": "AAPL  260619C00190000",  # OPRA OSI: root padded to 6 chars
+    },
+    # TBBO = trade carried with the BBO at the time. *_px are int * 1e-9.
+    "tbbo": [
+        {
+            "instrument_id": 9001,
+            "ts_event": 1750000000000000000,
+            "price": 190000000000,      # last trade -> 190.00
+            "size": 100,
+            "side": "B",
+            "bid_px_00": 189950000000,  # -> 189.95
+            "ask_px_00": 190050000000,  # -> 190.05
+            "bid_sz_00": 200,
+            "ask_sz_00": 300,
+        }
+    ],
+    # definition schema: instrument_class 'C'/'P'/'K', strike scaled 1e-9,
+    # expiration as nanoseconds since the UTC epoch (1781827200e9 = 2026-06-19).
+    "definition": [
+        {
+            "instrument_id": 55001,
+            "raw_symbol": "AAPL  260619C00190000",
+            "instrument_class": "C",
+            "strike_price": 190000000000,
+            "expiration": 1781827200000000000,
+            "underlying": "AAPL",
+        }
+    ],
+    # Per-option TBBO (bid/ask/last). Databento carries no greeks.
+    "option_tbbo": [
+        {
+            "instrument_id": 55001,
+            "price": 5200000000,       # -> 5.20
+            "size": 3,
+            "bid_px_00": 5100000000,   # -> 5.10
+            "ask_px_00": 5300000000,   # -> 5.30
+            "bid_sz_00": 40,
+            "ask_sz_00": 55,
+        }
+    ],
+}
+
+
 # ---------------------------------------------------------------------------
 # Daily OHLCV history for the momentum-crossover example. One base close series
 # (a decline then a rally ending at 190.00), shaped natively per broker. They
@@ -328,3 +446,30 @@ RAW_IBKR["historyData"] = {
         for b in _BASE_BARS
     ],
 }
+
+# massive.com: /v2/aggs/ticker/AAPL/range/1/day -> { results: [...] }, t epoch ms.
+RAW_MASSIVE["aggregates"] = {
+    "ticker": "AAPL",
+    "results": [
+        {"t": b["ms"], "o": b["open"], "h": b["high"], "l": b["low"], "c": b["close"], "v": b["volume"]}
+        for b in _BASE_BARS
+    ],
+}
+
+# Databento: OHLCV-1d schema. Prices are int64 scaled 1e-9, ts_event in ns.
+def _scaled(px):
+    return int(round(px * 1_000_000_000))
+
+
+RAW_DATABENTO["ohlcv"] = [
+    {
+        "instrument_id": 9001,
+        "ts_event": b["ms"] * 1_000_000,  # ms -> ns
+        "open": _scaled(b["open"]),
+        "high": _scaled(b["high"]),
+        "low": _scaled(b["low"]),
+        "close": _scaled(b["close"]),
+        "volume": b["volume"],
+    }
+    for b in _BASE_BARS
+]

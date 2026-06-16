@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import List, Sequence
 
-from ..contract import Balance, Candle, Order, OrderRequest, Position, Quote
+from ..contract import Balance, Candle, OptionContract, Order, OrderRequest, Position, Quote
 
 
 def _as_list(node):
@@ -89,9 +89,30 @@ class TradierAdapter:
             for d in days
         ]
 
-    def get_option_chain(self, underlying: str, expiration: str):
-        # Native passthrough would map /markets/options/chains here.
-        raise NotImplementedError("option chain mapping not wired in this slice")
+    def get_option_chain(self, underlying: str, expiration: str) -> List[OptionContract]:
+        # Tradier's /markets/options/chains is the canonical chain shape, so this
+        # is a near-identity map like the rest of this adapter.
+        rows = _as_list(self._raw.get("chains", {}).get("options", {}).get("option"))
+        out = []
+        for o in rows:
+            if o.get("underlying", underlying).upper() != underlying.upper():
+                continue
+            if expiration and o.get("expiration_date") != expiration:
+                continue
+            out.append(
+                OptionContract(
+                    symbol=o["symbol"],
+                    underlying=o.get("underlying", underlying),
+                    option_type=o["option_type"],
+                    strike=_f(o["strike"]),
+                    expiration_date=o["expiration_date"],
+                    bid=_f(o.get("bid")),
+                    ask=_f(o.get("ask")),
+                    last=_f(o.get("last")),
+                    greeks=o.get("greeks"),  # Tradier ships native greeks inline
+                )
+            )
+        return out
 
     def preview_order(self, req: OrderRequest) -> Order:
         # Read-only / preview by design. Live execution is opt-in and never automatic.

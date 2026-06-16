@@ -74,7 +74,9 @@ tradier_canonical/
     alpaca.py            Alpaca native -> canonical
     schwab.py            Schwab Trader API -> canonical
     ibkr.py              IBKR Client Portal Web API -> canonical
-    __init__.py          registry + get_adapter() factory  <- add a broker here
+    massive.py           massive.com (Polygon rebranded) -> canonical (DATA feed, no accounts)
+    databento.py         databento -> canonical (DATA feed, int64 1e-9 prices, no accounts)
+    __init__.py          registry + get_adapter() factory + DATA_ONLY  <- add a broker/feed here
   fixtures.py            real-shaped native payloads, no creds needed
   demo_algo.py           one algo, six brokers, zero changes
   convert_ibkr_algo.py   real ib_insync IBKR algo, converted to run on all six
@@ -86,7 +88,7 @@ tradier_canonical/
 
 ```bash
 python -m engine.demo_algo            # the live demo
-python engine/tests/test_conformance.py   # 5/5 pass, no pytest needed
+python engine/tests/test_conformance.py   # 9/9 pass, no pytest needed
 ```
 
 ## Adding a broker (the whole point)
@@ -99,4 +101,4 @@ In production each adapter takes credentials and a base URL and makes live REST 
 
 ## Status
 
-Vertical slice: balances, positions, quotes, and order preview across 6 brokers (Tradier, tastytrade, SnapTrade, Alpaca, Schwab, IBKR), fully tested, plus a working IBKR-algo convert demo. Next: option chains + Greeks (Tradier's chain shape as the target).
+Vertical slice: balances, positions, quotes, candles, and order preview across 6 brokers (Tradier, tastytrade, SnapTrade, Alpaca, Schwab, IBKR), plus 2 market-data feeds (massive.com, databento) on the quote + candle + option-chain side. Fully tested (9/9), plus a working IBKR-algo convert demo. Option chains + Greeks are live for the Tradier reference adapter and both data feeds (Tradier's chain shape is the target); next is wiring chains for the other 5 broker adapters, and live REST transport per adapter.

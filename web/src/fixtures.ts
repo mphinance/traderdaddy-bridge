@@ -222,6 +222,41 @@ export const RAW_IBKR: Raw = {
   ],
 };
 
+// --- massive.com (Polygon.io rebranded): market DATA feed, NO accounts. -------
+// Terse snapshot keys: lastTrade.p = last, lastQuote.p = bid, lastQuote.P = ask,
+// day.v = volume. Daily candles arrive from the aggregates endpoint (below).
+export const RAW_MASSIVE: Raw = {
+  snapshot: {
+    ticker: {
+      ticker: "AAPL",
+      lastTrade: { p: 190.0, s: 100, x: 4, t: 1750000000000000000 },
+      lastQuote: { P: 190.05, S: 3, p: 189.95, s: 2, t: 1750000000000000000 },
+      day: { o: 188.0, h: 191.0, l: 187.5, c: 190.0, v: 51234567, vw: 189.6 },
+    },
+  },
+};
+
+// --- Databento: raw market DATA feed, NO accounts. The most divergent shape. --
+// Prices are int64 scaled 1e-9 (190.00 -> 190000000000). Records carry a numeric
+// instrument_id resolved by the symbology map. OHLCV-1d candles added below.
+export const RAW_DATABENTO: Raw = {
+  symbology: { "9001": "AAPL" },
+  // TBBO = trade carried with the BBO at the time. *_px are int * 1e-9.
+  tbbo: [
+    {
+      instrument_id: 9001,
+      ts_event: 1750000000000000000,
+      price: 190000000000, // last trade -> 190.00
+      size: 100,
+      side: "B",
+      bid_px_00: 189950000000, // -> 189.95
+      ask_px_00: 190050000000, // -> 190.05
+      bid_sz_00: 200,
+      ask_sz_00: 300,
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Daily OHLCV history for the momentum-crossover example. One base close series
 // (a dip then a rally, ending at the same 190.00 the quotes show), shaped
@@ -305,6 +340,41 @@ RAW_IBKR.historyData = {
   symbol: "AAPL",
   data: BASE_BARS.map((b) => ({ t: b.ms, o: b.open, h: b.high, l: b.low, c: b.close, v: b.volume })),
 };
+
+// massive.com: /v2/aggs/ticker/AAPL/range/1/day -> { results: [...] }, t epoch ms.
+RAW_MASSIVE.aggregates = {
+  ticker: "AAPL",
+  results: BASE_BARS.map((b) => ({ t: b.ms, o: b.open, h: b.high, l: b.low, c: b.close, v: b.volume })),
+};
+
+// Databento: OHLCV-1d. Prices int64 scaled 1e-9, ts_event in nanoseconds.
+const scaled = (px: number) => Math.round(px * 1e9);
+RAW_DATABENTO.ohlcv = BASE_BARS.map((b) => ({
+  instrument_id: 9001,
+  ts_event: b.ms * 1e6, // ms -> ns
+  open: scaled(b.open),
+  high: scaled(b.high),
+  low: scaled(b.low),
+  close: scaled(b.close),
+  volume: b.volume,
+}));
+
+// Market data feeds (no accounts): quotes + candles only. Listed apart from the
+// brokers so account-driven UI sections never call balances/positions on them.
+export const FEEDS: BrokerMeta[] = [
+  {
+    key: "massive",
+    label: "massive.com",
+    raw: RAW_MASSIVE,
+    blurb: "Polygon.io rebranded. Terse snapshot keys (lastTrade.p, lastQuote.p/P, day.v). A pure data feed: no accounts.",
+  },
+  {
+    key: "databento",
+    label: "Databento",
+    raw: RAW_DATABENTO,
+    blurb: "Raw market data. Prices are int64 scaled by 1e-9 and symbols are numeric instrument ids resolved via a symbology map. A pure data feed: no accounts.",
+  },
+];
 
 export interface BrokerMeta {
   key: string;
