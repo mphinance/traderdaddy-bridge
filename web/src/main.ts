@@ -72,6 +72,76 @@ function canonicalView(brokerKey: string) {
   return { balance: bal, positions, quotes };
 }
 
+const LIVE_URL = "http://localhost:8787/api/live?symbol=AAPL";
+
+function liveSection(): string {
+  return `
+  <section id="live">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Live, read-only</div>
+        <h2>Read a real Tradier account through the same adapter.</h2>
+        <p>Everything above runs on sample data. This reads a real Tradier account live, balances, positions, quotes, and candles, mapped by the exact same canonical adapter. It runs against a local read-only backend (your token never leaves your machine, orders are never called). Start it with <code>python -m server.live_tradier</code>, then connect.</p>
+      </div>
+      <div style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+        <button class="btn btn-primary" id="live-btn">Connect live (local backend)</button>
+        <span id="live-status" style="font-size:0.85rem;color:var(--fg-3)"></span>
+      </div>
+      <div id="live-result"></div>
+    </div>
+  </section>`;
+}
+
+function renderLiveError(detail: string): string {
+  return `<div class="note"><b>Backend not reachable.</b> ${esc(detail)}<br/>Start the local read-only server from the repo root, then click Connect:
+    <pre class="code" style="margin-top:0.6rem">BRIDGE_SECRETS=/path/to/secrets.env python -m server.live_tradier</pre></div>`;
+}
+
+function renderLive(d: any): string {
+  const stanceColor = d.momentum?.stance === "BULLISH" ? "var(--bull-bright)" : d.momentum?.stance === "BEARISH" ? "var(--bear-bright)" : "var(--fg-3)";
+  const positions = (d.positions ?? [])
+    .map((p: any) => `<div class="strip-row"><div class="strip-broker">${esc(p.symbol)}</div><div class="strip-data">${p.quantity} @ avg ${p.avg_price?.toFixed?.(2) ?? p.avg_price} &middot; cost $${Number(p.cost_basis).toLocaleString()}</div></div>`)
+    .join("");
+  const q = (d.quotes ?? [])[0];
+  const mom = d.momentum;
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem" class="strat-grid">
+      <div class="card">
+        <div class="panel-label"><span><span class="live-dot"></span> LIVE &middot; ${esc(d.source)}</span><span>acct ${esc(d.account ?? "n/a")}</span></div>
+        <div style="font-family:var(--font-mono);font-size:0.9rem;line-height:1.9">
+          <div>total equity <span class="j-num">$${Number(d.balance.total_equity).toLocaleString()}</span></div>
+          <div>total cash <span class="j-num">$${Number(d.balance.total_cash).toLocaleString()}</span></div>
+          ${q ? `<div>${esc(q.symbol)} last <span class="j-num">${q.last}</span> &middot; bid ${q.bid} &middot; ask ${q.ask}</div>` : ""}
+          ${mom ? `<div style="margin-top:0.4rem">momentum EMA ${mom.fast}/${mom.slow}: <span style="color:${stanceColor};font-weight:700">${mom.stance}</span> &middot; ${mom.cross_type ?? "no"} cross ${mom.bars_since_cross != null ? mom.bars_since_cross + " bars ago" : ""} &middot; ${d.candle_count} bars</div>` : ""}
+        </div>
+      </div>
+      <div class="strip">
+        <div class="strip-row" style="background:rgba(59,130,246,0.06)"><div class="strip-broker" style="color:var(--fg-4);font-size:0.7rem;letter-spacing:0.08em">CANONICAL POSITIONS (LIVE)</div><div></div></div>
+        ${positions || `<div class="strip-row"><div class="strip-data" style="color:var(--fg-4)">no open positions</div></div>`}
+      </div>
+    </div>`;
+}
+
+async function connectLive() {
+  const status = document.querySelector("#live-status")!;
+  const result = document.querySelector("#live-result")!;
+  status.textContent = "connecting...";
+  try {
+    const res = await fetch(LIVE_URL, { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      status.textContent = "";
+      result.innerHTML = renderLiveError(data.detail || data.error || `HTTP ${res.status}`);
+      return;
+    }
+    status.textContent = "connected, read-only";
+    result.innerHTML = renderLive(data);
+  } catch (e) {
+    status.textContent = "";
+    result.innerHTML = renderLiveError(String(e));
+  }
+}
+
 function transformerSection(): string {
   return `
   <section id="transform">
@@ -313,6 +383,7 @@ function render() {
         <div class="brand"><span class="mark"></span> TraderDaddy <span style="color:var(--blue-300)">Bridge</span></div>
         <div class="nav-links">
           <a href="#transform">Transform</a>
+          <a href="#live">Live</a>
           <a href="#proof">Conformance</a>
           <a href="#strategy">Strategy</a>
           <a href="#onboard">Onboard</a>
@@ -335,6 +406,7 @@ function render() {
     </header>
 
     ${transformerSection()}
+    ${liveSection()}
     ${conformanceSection()}
     ${strategySection()}
     ${onboardingSection()}
@@ -362,6 +434,7 @@ function render() {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".pill");
     if (btn?.dataset.broker) renderTransform(btn.dataset.broker);
   });
+  document.querySelector("#live-btn")!.addEventListener("click", connectLive);
   renderTransform(BROKERS[0].key);
 }
 

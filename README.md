@@ -31,6 +31,24 @@ An EMA 8 over EMA 21 momentum crossover. The math is Michael's mur quantlab: a P
 
 The contract covers balances, positions, quotes, AND daily candles. All of them normalize across brokers, so the strategy produces the same golden cross on Tradier, tastytrade, Schwab, Alpaca, and IBKR.
 
+## Live, read-only
+
+The demo above runs on sample data. The Live panel reads a **real Tradier account** through the exact same canonical adapter: balances, positions, quotes, and candles, with the momentum signal computed on real history.
+
+![Live read](docs/live-read.png)
+
+It runs against a small **local, read-only backend** (`server/`). Your token is read from the environment at runtime, never enters git, and the backend calls only Tradier read endpoints. `place_order` stays preview-only. See [server/README.md](server/README.md).
+
+```bash
+# terminal 1: the read-only backend (from repo root)
+BRIDGE_SECRETS=/path/to/secrets.env python -m server.live_tradier
+# terminal 2: the web app, served locally so it can reach localhost
+cd web && npm run dev
+# open the local app, scroll to Live, click Connect
+```
+
+(The hosted Pages site is the shareable demo; live mode is local-only, since browsers block an https page from calling http://localhost.)
+
 ## Why Tradier-shaped, not neutral
 
 Other unified APIs (OpenAlgo for India, ccxt for crypto) map brokers into a deliberately neutral schema. This one does the opposite on purpose: it favors Tradier. When other brokers' users adopt Tradier-native tooling, they migrate toward Tradier. Tradier becomes the lingua franca, the API every developer learns first. That is the whole point. It is a business thesis, not a neutral utility.
@@ -41,6 +59,7 @@ Other unified APIs (OpenAlgo for India, ccxt for crypto) map brokers into a deli
 traderdaddy-bridge/
   engine/        Python reference engine (the canonical contract + 6 adapters + tests)
   web/           Vite + TypeScript live demo (deployed to GitHub Pages)
+  server/        local read-only live Tradier backend (stdlib only)
   docs/          screenshots
 ```
 
@@ -77,7 +96,7 @@ Tradier ships an MCP server whose tools are shaped like its API, the exact shape
 
 ## Honest status
 
-This is a working, tested proof, not a live trading library. The canonical contract, all six adapters, the conformance tests, and every transform in the demo are real and run on sample payloads that were verified against each broker's official docs and SDK. What is not wired yet: live authenticated REST calls to each broker. That needs credentials and a backend host and is deliberately kept out of a static site. The mapping logic is done; the live transport is the next step.
+The canonical contract, all six adapters, the conformance tests, and every transform in the demo are real and run on sample payloads verified against each broker's official docs and SDK. **Tradier live read is wired** through the local read-only backend in `server/` (real balances, positions, quotes, candles, and the momentum signal on real history). Live read for the other five brokers is the next step (same pattern: each adapter gets a base URL + token and real REST calls). The hosted site stays demo-only; live mode runs locally so no token or real account is ever exposed.
 
 Reads are the universal surface. Order placement previews by design. Live execution is opt-in per adapter and never automatic. No money moves without a human.
 
