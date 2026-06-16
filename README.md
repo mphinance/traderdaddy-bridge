@@ -37,6 +37,12 @@ The contract is clean enough that pure market-data vendors map into it too, not 
 
 ![Market data feeds](docs/feeds.png)
 
+*Both feeds: native payload on the left, the canonical Tradier-shaped quote and candles on the right. They collapse to the same result the brokers do.*
+
+A closer look at **massive.com** (Polygon.io rebranded), its native snapshot plus daily aggregates mapped into the canonical quote and candle series:
+
+![massive.com mapped to canonical](docs/feeds-massive.png)
+
 ## Live, read-only
 
 The demo above runs on sample data. The Live panel reads a **real Tradier account** through the exact same canonical adapter: balances, positions, quotes, and candles, with the momentum signal computed on real history.
