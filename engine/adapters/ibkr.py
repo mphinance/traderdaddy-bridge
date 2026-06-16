@@ -15,9 +15,14 @@ No em dashes anywhere in this file.
 
 from __future__ import annotations
 
+import datetime as _dt
 from typing import List, Sequence
 
-from ..contract import Balance, Order, OrderRequest, Position, Quote
+from ..contract import Balance, Candle, Order, OrderRequest, Position, Quote
+
+
+def _ms_date(ms) -> str:
+    return _dt.datetime.fromtimestamp(int(ms) / 1000, tz=_dt.timezone.utc).date().isoformat()
 
 # IBKR market-data snapshot field codes (the documented iserver field ids).
 _LAST, _BID, _ASK, _VOLUME, _SYMBOL = "31", "84", "86", "87", "55"
@@ -73,6 +78,20 @@ class IBKRAdapter:
                 )
             )
         return out
+
+    def get_candles(self, symbol: str) -> List[Candle]:
+        rows = self._raw.get("historyData", {}).get("data", [])
+        return [
+            Candle(
+                date=_ms_date(b["t"]),
+                open=float(b["o"]),
+                high=float(b["h"]),
+                low=float(b["l"]),
+                close=float(b["c"]),
+                volume=float(b["v"]),
+            )
+            for b in rows
+        ]
 
     def get_option_chain(self, underlying: str, expiration: str):
         raise NotImplementedError("option chain mapping not wired in this slice")

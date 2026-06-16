@@ -33,6 +33,16 @@ export interface Balance {
   account_number: string | null;
 }
 
+// One OHLCV bar. Mirrors a Tradier /v1/markets/history "day" row.
+export interface Candle {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface OrderRequest {
   symbol: string;
   side: string;
@@ -63,6 +73,9 @@ export interface BrokerAdapter {
   getBalances(): Balance;
   getPositions(): Position[];
   getQuotes(symbols: string[]): Quote[];
+  // Daily OHLCV history. Returns [] for brokers with no history endpoint
+  // (SnapTrade, an aggregator, is the honest example).
+  getCandles(symbol: string): Candle[];
   previewOrder(req: OrderRequest): Order;
 }
 

@@ -8,6 +8,7 @@ from .adapters import get_adapter, supported_brokers
 from .contract import (
     Balance,
     BrokerAdapter,
+    Candle,
     OptionContract,
     Order,
     OrderRequest,
@@ -20,6 +21,7 @@ __all__ = [
     "supported_brokers",
     "Balance",
     "BrokerAdapter",
+    "Candle",
     "OptionContract",
     "Order",
     "OrderRequest",

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import List, Sequence
 
-from ..contract import Balance, Order, OrderRequest, Position, Quote
+from ..contract import Balance, Candle, Order, OrderRequest, Position, Quote
 
 
 def _as_list(node):
@@ -74,6 +74,20 @@ class TradierAdapter:
                 )
             )
         return out
+
+    def get_candles(self, symbol: str) -> List[Candle]:
+        days = self._raw.get("history", {}).get("history", {}).get("day", [])
+        return [
+            Candle(
+                date=d["date"],
+                open=float(d["open"]),
+                high=float(d["high"]),
+                low=float(d["low"]),
+                close=float(d["close"]),
+                volume=float(d["volume"]),
+            )
+            for d in days
+        ]
 
     def get_option_chain(self, underlying: str, expiration: str):
         # Native passthrough would map /markets/options/chains here.

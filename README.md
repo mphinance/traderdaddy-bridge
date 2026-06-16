@@ -23,6 +23,14 @@ Six brokers return wildly different payloads for the same account. Every one of 
 
 Pick a broker on the live demo and watch its raw payload collapse into the canonical object in real time. The transform is real TypeScript running in your browser, not a recording.
 
+## A real strategy, running on every broker
+
+An EMA 8 over EMA 21 momentum crossover. The math is Michael's mur quantlab: a Pine-seeded EMA and `ta.crossover` semantics. It is written once against the canonical candle shape, so it runs identically on any broker that serves history. SnapTrade, an aggregator with no history endpoint, is shown honestly as unsupported for candle strategies.
+
+![Momentum crossover](docs/strategy.png)
+
+The contract covers balances, positions, quotes, AND daily candles. All of them normalize across brokers, so the strategy produces the same golden cross on Tradier, tastytrade, Schwab, Alpaca, and IBKR.
+
 ## Why Tradier-shaped, not neutral
 
 Other unified APIs (OpenAlgo for India, ccxt for crypto) map brokers into a deliberately neutral schema. This one does the opposite on purpose: it favors Tradier. When other brokers' users adopt Tradier-native tooling, they migrate toward Tradier. Tradier becomes the lingua franca, the API every developer learns first. That is the whole point. It is a business thesis, not a neutral utility.
@@ -42,8 +50,9 @@ The source of truth. Canonical contract, six adapters, conformance tests, and tw
 ```bash
 # from the repo root
 python -m engine.demo_algo              # one algo, six brokers, identical result
+python -m engine.strategy               # EMA crossover, same signal every broker
 python -m engine.convert_onboarding     # five traders, five SDKs, all onboarded
-python engine/tests/test_conformance.py # proves the six collapse to one object
+python engine/tests/test_conformance.py # 7/7: balances, positions, quotes, candles
 ```
 
 ### The web demo

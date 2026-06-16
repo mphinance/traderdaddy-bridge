@@ -10,6 +10,17 @@ import { getAdapter, supportedBrokers } from "./adapters";
 import { avgPrice } from "./contract";
 import { runAlgo, trimCandidates } from "./algo";
 import { PEOPLE, CANONICAL_AFTER } from "./onboarding";
+import { emaCrossover, StrategyResult } from "./strategy";
+
+const STRATEGY_CODE = `# EMA momentum crossover. Fast 8 over slow 21.
+# Math is Michael's mur quantlab: Pine-seeded EMA + ta.crossover.
+ema_fast = ema(closes, 8)
+ema_slow = ema(closes, 21)
+if crossover(ema_fast, ema_slow):   # golden cross
+    signal = "BUY"
+elif crossunder(ema_fast, ema_slow):  # death cross
+    signal = "SELL"
+# closes come from broker.get_candles(symbol) -> identical on every broker`;
 
 const REPO = "https://github.com/mphinance/traderdaddy-bridge";
 
@@ -116,6 +127,99 @@ function conformanceSection(): string {
   </section>`;
 }
 
+function chartSvg(r: StrategyResult): string {
+  const W = 1040;
+  const H = 300;
+  const padL = 10;
+  const padR = 10;
+  const padT = 18;
+  const padB = 28;
+  const n = r.closes.length;
+  const all = [...r.closes, ...r.emaFast, ...r.emaSlow].filter((v) => !Number.isNaN(v));
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  const span = max - min || 1;
+  const x = (i: number) => padL + (i * (W - padL - padR)) / (n - 1);
+  const y = (v: number) => padT + ((max - v) / span) * (H - padT - padB);
+  const poly = (series: number[], color: string, width: number) => {
+    const pts = series
+      .map((v, i) => (Number.isNaN(v) ? null : `${x(i).toFixed(1)},${y(v).toFixed(1)}`))
+      .filter(Boolean)
+      .join(" ");
+    return `<polyline fill="none" stroke="${color}" stroke-width="${width}" points="${pts}" />`;
+  };
+  let marker = "";
+  if (r.crossIndex >= 0) {
+    const cx = x(r.crossIndex);
+    const cy = y(r.emaSlow[r.crossIndex]);
+    const isGolden = r.crossType === "golden";
+    const color = isGolden ? "#10b981" : "#ef4444";
+    const labelX = Math.min(cx + 8, W - 120);
+    marker = `
+      <line x1="${cx}" y1="${padT}" x2="${cx}" y2="${H - padB}" stroke="${color}" stroke-width="1" stroke-dasharray="4 4" opacity="0.6" />
+      <circle cx="${cx}" cy="${cy}" r="5" fill="${color}" />
+      <text x="${labelX}" y="${padT + 12}" fill="${color}" font-family="Space Mono, monospace" font-size="12" font-weight="700">${isGolden ? "GOLDEN CROSS" : "DEATH CROSS"}</text>`;
+  }
+  return `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="EMA crossover chart">
+      ${poly(r.closes, "#93c5fd", 1.5)}
+      ${poly(r.emaSlow, "#a855f7", 2)}
+      ${poly(r.emaFast, "#f59e0b", 2)}
+      ${marker}
+    </svg>`;
+}
+
+function strategySection(): string {
+  // The strategy runs on canonical candles, identical across every broker that
+  // serves history. Compute the reference run from Tradier.
+  const tradier = getAdapter("tradier", BROKERS.find((b) => b.key === "tradier")!.raw);
+  const r = emaCrossover(tradier.getCandles("AAPL"));
+
+  const stanceColor = r.stance === "BULLISH" ? "var(--bull-bright)" : r.stance === "BEARISH" ? "var(--bear-bright)" : "var(--fg-3)";
+  const crossText =
+    r.crossIndex >= 0
+      ? `${r.crossType === "golden" ? "Golden cross" : "Death cross"} ${r.barsSinceCross === 0 ? "on the latest bar" : `${r.barsSinceCross} bars ago`}`
+      : "no cross in window";
+
+  // Per-broker agreement (brokers with no history endpoint are flagged).
+  const rows = supportedBrokers()
+    .map((name) => {
+      const meta = BROKERS.find((b) => b.key === name)!;
+      const candles = getAdapter(name, meta.raw).getCandles("AAPL");
+      if (candles.length === 0) {
+        return `<div class="strip-row"><div class="strip-broker">${meta.label}</div><div class="strip-data" style="color:var(--fg-4)">no history endpoint (aggregator) &middot; quotes + positions only</div></div>`;
+      }
+      const rr = emaCrossover(candles);
+      return `<div class="strip-row"><div class="strip-broker">${meta.label}</div><div class="strip-data"><span class="chk">&#10003;</span> ${rr.stance} &middot; ${rr.crossType ?? "no"} cross &middot; ${candles.length} bars</div></div>`;
+    })
+    .join("");
+
+  return `
+  <section id="strategy">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Real strategy</div>
+        <h2>A momentum crossover, running on every broker.</h2>
+        <p>An EMA 8 over EMA 21 crossover. The exact math is Michael's mur quantlab: a Pine-seeded EMA and ta.crossover semantics. It is written once against the canonical candle shape, so it runs identically on any broker that serves history. SnapTrade, an aggregator with no history endpoint, is shown honestly as unsupported for candle strategies.</p>
+      </div>
+      <div class="card">
+        <div class="panel-label">
+          <span>AAPL daily &middot; EMA 8 (<span style="color:var(--gold)">gold</span>) vs EMA 21 (<span style="color:var(--purple)">purple</span>) &middot; close (<span style="color:var(--blue-300)">blue</span>)</span>
+          <span style="color:${stanceColor};font-weight:700">${r.stance} &middot; ${crossText}</span>
+        </div>
+        ${chartSvg(r)}
+      </div>
+      <div style="display:grid;grid-template-columns:1.1fr 0.9fr;gap:1rem;margin-top:1rem" class="strat-grid">
+        <div class="card">
+          <div class="panel-label"><span class="tag-canon">The strategy, written once</span></div>
+          <pre class="code">${esc(STRATEGY_CODE)}</pre>
+        </div>
+        <div class="strip">${rows}</div>
+      </div>
+    </div>
+  </section>`;
+}
+
 function onboardingSection(): string {
   const cards = PEOPLE.map((person) => {
     const meta = BROKERS.find((b) => b.key === person.broker)!;
@@ -203,6 +307,7 @@ function render() {
         <div class="nav-links">
           <a href="#transform">Transform</a>
           <a href="#proof">Conformance</a>
+          <a href="#strategy">Strategy</a>
           <a href="#onboard">Onboard</a>
           <a href="#how">How</a>
           <a href="${REPO}">GitHub</a>
@@ -224,6 +329,7 @@ function render() {
 
     ${transformerSection()}
     ${conformanceSection()}
+    ${strategySection()}
     ${onboardingSection()}
     ${pipelineSection()}
     ${featuresSection()}

@@ -18,7 +18,7 @@ Six brokers return wildly different payloads for the same account:
 Every one of them maps INTO Tradier's shape through a thin adapter. Downstream, nothing knows the difference.
 
 ```
-$ python -m tradier_canonical.demo_algo
+$ python -m engine.demo_algo
 
   tradier     cash=$25,000  AAPL 100 @ avg 180.00 last 190.00  uPnL $1,000.00  ABOVE cost
   tastytrade  cash=$25,000  AAPL 100 @ avg 180.00 last 190.00  uPnL $1,000.00  ABOVE cost
@@ -38,8 +38,8 @@ swap the five broker-specific data-access lines, leave the strategy math
 untouched, and the same algo now runs on all six brokers, IBKR included.
 
 ```bash
-python -m tradier_canonical.convert_ibkr_algo    # one broker, deep before/after
-python -m tradier_canonical.convert_onboarding    # five traders, five SDKs, onboarded
+python -m engine.convert_ibkr_algo    # one broker, deep before/after
+python -m engine.convert_onboarding    # five traders, five SDKs, onboarded
 ```
 
 `convert_onboarding.py` is the sales motion: Bob (tastytrade), Jim (Schwab),
@@ -85,8 +85,8 @@ tradier_canonical/
 ## Run it
 
 ```bash
-python -m tradier_canonical.demo_algo            # the live demo
-python tradier_canonical/tests/test_conformance.py   # 5/5 pass, no pytest needed
+python -m engine.demo_algo            # the live demo
+python engine/tests/test_conformance.py   # 5/5 pass, no pytest needed
 ```
 
 ## Adding a broker (the whole point)

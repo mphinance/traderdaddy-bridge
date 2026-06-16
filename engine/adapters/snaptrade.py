@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import List, Sequence
 
-from ..contract import Balance, Order, OrderRequest, Position, Quote
+from ..contract import Balance, Candle, Order, OrderRequest, Position, Quote
 
 
 def _raw_symbol(node) -> str:
@@ -84,6 +84,10 @@ class SnapTradeAdapter:
                 )
             )
         return out
+
+    def get_candles(self, symbol: str) -> List[Candle]:
+        # SnapTrade is an aggregator with no price-history endpoint. Honest empty.
+        return []
 
     def get_option_chain(self, underlying: str, expiration: str):
         raise NotImplementedError("option chain mapping not wired in this slice")

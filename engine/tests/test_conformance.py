@@ -64,6 +64,37 @@ def test_quotes_are_identical_across_brokers():
         assert q[0].ask == 190.05, name
 
 
+def test_candles_identical_where_supported():
+    # Every broker that serves history must produce the same canonical candles.
+    # SnapTrade (aggregator, no history endpoint) returns an empty list.
+    series = {}
+    for name, raw in RAWS.items():
+        candles = get_adapter(name, raw).get_candles("AAPL")
+        if name == "snaptrade":
+            assert candles == [], "snaptrade has no history endpoint"
+            continue
+        assert len(candles) == 30, f"{name} should map 30 daily bars"
+        series[name] = [(c.date, c.close) for c in candles]
+
+    ref = series["tradier"]
+    for name, s in series.items():
+        assert s == ref, f"{name} candles diverge from tradier"
+
+
+def test_momentum_signal_agrees_across_brokers():
+    from engine.strategy import ema_crossover
+
+    stances = set()
+    for name, raw in RAWS.items():
+        candles = get_adapter(name, raw).get_candles("AAPL")
+        if not candles:
+            continue
+        r = ema_crossover(candles)
+        assert r.cross_type == "golden", f"{name} should see a golden cross"
+        stances.add(r.stance)
+    assert stances == {"BULLISH"}, "all history brokers must agree on stance"
+
+
 def test_preview_order_never_executes():
     broker = get_adapter("tradier", fixtures.RAW_TRADIER)
     from engine import OrderRequest

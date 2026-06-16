@@ -10,9 +10,14 @@ No em dashes anywhere in this file.
 
 from __future__ import annotations
 
+import datetime as _dt
 from typing import List, Sequence
 
-from ..contract import Balance, Order, OrderRequest, Position, Quote
+from ..contract import Balance, Candle, Order, OrderRequest, Position, Quote
+
+
+def _ms_date(ms) -> str:
+    return _dt.datetime.fromtimestamp(int(ms) / 1000, tz=_dt.timezone.utc).date().isoformat()
 
 
 class SchwabAdapter:
@@ -71,6 +76,20 @@ class SchwabAdapter:
                 )
             )
         return out
+
+    def get_candles(self, symbol: str) -> List[Candle]:
+        rows = self._raw.get("priceHistory", {}).get("candles", [])
+        return [
+            Candle(
+                date=_ms_date(c["datetime"]),
+                open=float(c["open"]),
+                high=float(c["high"]),
+                low=float(c["low"]),
+                close=float(c["close"]),
+                volume=float(c["volume"]),
+            )
+            for c in rows
+        ]
 
     def get_option_chain(self, underlying: str, expiration: str):
         raise NotImplementedError("option chain mapping not wired in this slice")

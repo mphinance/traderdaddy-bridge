@@ -7,6 +7,7 @@
 import {
   Balance,
   BrokerAdapter,
+  Candle,
   Order,
   OrderRequest,
   Position,
@@ -18,6 +19,8 @@ import { Raw } from "../fixtures";
 
 const f = (v: any): number | null => (v === null || v === undefined ? null : Number(v));
 const i = (v: any): number | null => (v === null || v === undefined ? null : Math.trunc(Number(v)));
+// epoch ms -> YYYY-MM-DD
+const msDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 // --- Tradier: near identity map. The reference. -----------------------------
 class TradierAdapter implements BrokerAdapter {
@@ -56,6 +59,16 @@ class TradierAdapter implements BrokerAdapter {
         ask: f(q.ask),
         volume: i(q.volume),
       }));
+  }
+  getCandles(_symbol: string): Candle[] {
+    return (this.raw.history?.history?.day ?? []).map((d: any) => ({
+      date: d.date,
+      open: Number(d.open),
+      high: Number(d.high),
+      low: Number(d.low),
+      close: Number(d.close),
+      volume: Number(d.volume),
+    }));
   }
   previewOrder(req: OrderRequest): Order {
     return previewOrder(req);
@@ -103,6 +116,18 @@ class TastytradeAdapter implements BrokerAdapter {
       });
     }
     return out;
+  }
+  getCandles(symbol: string): Candle[] {
+    // dxfeed Candle events, time in epoch ms.
+    const rows = this.raw.candles?.[symbol.toUpperCase()] ?? [];
+    return rows.map((c: any) => ({
+      date: msDate(Number(c.time)),
+      open: Number(c.open),
+      high: Number(c.high),
+      low: Number(c.low),
+      close: Number(c.close),
+      volume: Number(c["day-volume"]),
+    }));
   }
   previewOrder(req: OrderRequest): Order {
     return previewOrder(req);
@@ -158,6 +183,10 @@ class SnapTradeAdapter implements BrokerAdapter {
     }
     return out;
   }
+  getCandles(_symbol: string): Candle[] {
+    // SnapTrade is an aggregator with no price-history endpoint. Honest empty.
+    return [];
+  }
   previewOrder(req: OrderRequest): Order {
     return previewOrder(req);
   }
@@ -202,6 +231,18 @@ class AlpacaAdapter implements BrokerAdapter {
       });
     }
     return out;
+  }
+  getCandles(symbol: string): Candle[] {
+    // /v2/stocks/bars: { bars: { AAPL: [{t,o,h,l,c,v}] } }
+    const rows = this.raw.bars?.[symbol.toUpperCase()] ?? [];
+    return rows.map((b: any) => ({
+      date: String(b.t).split("T")[0],
+      open: Number(b.o),
+      high: Number(b.h),
+      low: Number(b.l),
+      close: Number(b.c),
+      volume: Number(b.v),
+    }));
   }
   previewOrder(req: OrderRequest): Order {
     return previewOrder(req);
@@ -249,6 +290,17 @@ class SchwabAdapter implements BrokerAdapter {
       });
     }
     return out;
+  }
+  getCandles(_symbol: string): Candle[] {
+    // /marketdata/v1/pricehistory: { candles: [{datetime,open,high,low,close,volume}] }
+    return (this.raw.priceHistory?.candles ?? []).map((c: any) => ({
+      date: msDate(Number(c.datetime)),
+      open: Number(c.open),
+      high: Number(c.high),
+      low: Number(c.low),
+      close: Number(c.close),
+      volume: Number(c.volume),
+    }));
   }
   previewOrder(req: OrderRequest): Order {
     return previewOrder(req);
@@ -308,6 +360,17 @@ class IBKRAdapter implements BrokerAdapter {
       });
     }
     return out;
+  }
+  getCandles(_symbol: string): Candle[] {
+    // /iserver/marketdata/history: { data: [{t,o,h,l,c,v}] }, t in epoch ms.
+    return (this.raw.historyData?.data ?? []).map((b: any) => ({
+      date: msDate(Number(b.t)),
+      open: Number(b.o),
+      high: Number(b.h),
+      low: Number(b.l),
+      close: Number(b.c),
+      volume: Number(b.v),
+    }));
   }
   previewOrder(req: OrderRequest): Order {
     return previewOrder(req);

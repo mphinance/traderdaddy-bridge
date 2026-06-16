@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List, Sequence
 
-from ..contract import Balance, Order, OrderRequest, Position, Quote
+from ..contract import Balance, Candle, Order, OrderRequest, Position, Quote
 
 
 class AlpacaAdapter:
@@ -69,6 +69,20 @@ class AlpacaAdapter:
                 )
             )
         return out
+
+    def get_candles(self, symbol: str) -> List[Candle]:
+        rows = self._raw.get("bars", {}).get(symbol.upper(), [])
+        return [
+            Candle(
+                date=str(b["t"]).split("T")[0],
+                open=float(b["o"]),
+                high=float(b["h"]),
+                low=float(b["l"]),
+                close=float(b["c"]),
+                volume=float(b["v"]),
+            )
+            for b in rows
+        ]
 
     def get_option_chain(self, underlying: str, expiration: str):
         raise NotImplementedError("option chain mapping not wired in this slice")

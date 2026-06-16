@@ -222,6 +222,90 @@ export const RAW_IBKR: Raw = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// Daily OHLCV history for the momentum-crossover example. One base close series
+// (a dip then a rally, ending at the same 190.00 the quotes show), shaped
+// natively per broker. They all normalize to one identical canonical series.
+// ---------------------------------------------------------------------------
+// A steady decline through ~bar 20 (so the slow EMA is above the fast as it
+// warms up), then a sharp rally that produces a clean golden cross late in the
+// window, ending at the same 190.00 the quotes show.
+const BASE_CLOSES = [
+  184.0, 183.6, 183.2, 182.7, 182.2, 181.6, 181.0, 180.5, 180.0, 179.5,
+  179.0, 178.6, 178.2, 177.8, 177.4, 177.0, 176.7, 176.4, 176.1, 176.0,
+  176.2, 177.5, 179.0, 181.0, 183.0, 185.0, 186.8, 188.2, 189.2, 190.0,
+];
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function genDates(n: number, endISO: string): string[] {
+  const out: string[] = [];
+  const d = new Date(endISO + "T00:00:00Z");
+  let guard = 0;
+  while (out.length < n && guard++ < 5000) {
+    const day = d.getUTCDay();
+    if (day !== 0 && day !== 6) out.unshift(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return out;
+}
+
+const DATES = genDates(BASE_CLOSES.length, "2026-06-12");
+
+export interface BaseBar {
+  date: string;
+  ms: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+const BASE_BARS: BaseBar[] = BASE_CLOSES.map((close, idx, arr) => {
+  const open = idx === 0 ? close : arr[idx - 1];
+  return {
+    date: DATES[idx],
+    ms: Date.parse(DATES[idx] + "T00:00:00Z"),
+    open: round2(open),
+    high: round2(Math.max(open, close) + 0.4),
+    low: round2(Math.min(open, close) - 0.4),
+    close,
+    volume: 50_000_000 + idx * 100_000,
+  };
+});
+
+// Tradier: /v1/markets/history -> { history: { day: [...] } }, plain keys.
+RAW_TRADIER.history = {
+  history: {
+    day: BASE_BARS.map((b) => ({ date: b.date, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume })),
+  },
+};
+
+// tastytrade: dxfeed Candle events, time in epoch ms.
+RAW_TASTYTRADE.candles = {
+  AAPL: BASE_BARS.map((b) => ({ time: b.ms, open: b.open, high: b.high, low: b.low, close: b.close, "day-volume": b.volume })),
+};
+
+// SnapTrade: aggregator, NO history endpoint. Intentionally absent.
+
+// Alpaca: /v2/stocks/bars -> { bars: { AAPL: [...] } }, one-letter keys.
+RAW_ALPACA.bars = {
+  AAPL: BASE_BARS.map((b) => ({ t: b.date + "T00:00:00Z", o: b.open, h: b.high, l: b.low, c: b.close, v: b.volume })),
+};
+
+// Schwab: /marketdata/v1/pricehistory -> { candles: [...] }, datetime in epoch ms.
+RAW_SCHWAB.priceHistory = {
+  symbol: "AAPL",
+  candles: BASE_BARS.map((b) => ({ datetime: b.ms, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume })),
+};
+
+// IBKR: /iserver/marketdata/history -> { data: [...] }, t in epoch ms, o/h/l/c/v.
+RAW_IBKR.historyData = {
+  symbol: "AAPL",
+  data: BASE_BARS.map((b) => ({ t: b.ms, o: b.open, h: b.high, l: b.low, c: b.close, v: b.volume })),
+};
+
 export interface BrokerMeta {
   key: string;
   label: string;

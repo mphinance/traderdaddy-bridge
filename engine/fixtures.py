@@ -236,3 +236,95 @@ RAW_IBKR = {
         }
     ],
 }
+
+
+# ---------------------------------------------------------------------------
+# Daily OHLCV history for the momentum-crossover example. One base close series
+# (a decline then a rally ending at 190.00), shaped natively per broker. They
+# all normalize to one identical canonical series. SnapTrade has no history
+# endpoint and is intentionally omitted.
+# ---------------------------------------------------------------------------
+import datetime as _dt  # noqa: E402
+
+_BASE_CLOSES = [
+    184.0, 183.6, 183.2, 182.7, 182.2, 181.6, 181.0, 180.5, 180.0, 179.5,
+    179.0, 178.6, 178.2, 177.8, 177.4, 177.0, 176.7, 176.4, 176.1, 176.0,
+    176.2, 177.5, 179.0, 181.0, 183.0, 185.0, 186.8, 188.2, 189.2, 190.0,
+]
+
+
+def _gen_dates(n, end_iso):
+    out = []
+    d = _dt.date.fromisoformat(end_iso)
+    while len(out) < n:
+        if d.weekday() < 5:  # Mon-Fri
+            out.insert(0, d.isoformat())
+        d -= _dt.timedelta(days=1)
+    return out
+
+
+_DATES = _gen_dates(len(_BASE_CLOSES), "2026-06-12")
+
+
+def _ms(date_str):
+    return int(_dt.datetime.fromisoformat(date_str + "T00:00:00+00:00").timestamp() * 1000)
+
+
+_BASE_BARS = []
+for _idx, _close in enumerate(_BASE_CLOSES):
+    _open = _close if _idx == 0 else _BASE_CLOSES[_idx - 1]
+    _BASE_BARS.append(
+        {
+            "date": _DATES[_idx],
+            "ms": _ms(_DATES[_idx]),
+            "open": round(_open, 2),
+            "high": round(max(_open, _close) + 0.4, 2),
+            "low": round(min(_open, _close) - 0.4, 2),
+            "close": _close,
+            "volume": 50_000_000 + _idx * 100_000,
+        }
+    )
+
+# Tradier: /v1/markets/history -> { history: { day: [...] } }, plain keys.
+RAW_TRADIER["history"] = {
+    "history": {
+        "day": [
+            {"date": b["date"], "open": b["open"], "high": b["high"], "low": b["low"], "close": b["close"], "volume": b["volume"]}
+            for b in _BASE_BARS
+        ]
+    }
+}
+
+# tastytrade: dxfeed Candle events, time in epoch ms.
+RAW_TASTYTRADE["candles"] = {
+    "AAPL": [
+        {"time": b["ms"], "open": b["open"], "high": b["high"], "low": b["low"], "close": b["close"], "day-volume": b["volume"]}
+        for b in _BASE_BARS
+    ]
+}
+
+# Alpaca: /v2/stocks/bars -> { bars: { AAPL: [...] } }, one-letter keys.
+RAW_ALPACA["bars"] = {
+    "AAPL": [
+        {"t": b["date"] + "T00:00:00Z", "o": b["open"], "h": b["high"], "l": b["low"], "c": b["close"], "v": b["volume"]}
+        for b in _BASE_BARS
+    ]
+}
+
+# Schwab: /marketdata/v1/pricehistory -> { candles: [...] }, datetime epoch ms.
+RAW_SCHWAB["priceHistory"] = {
+    "symbol": "AAPL",
+    "candles": [
+        {"datetime": b["ms"], "open": b["open"], "high": b["high"], "low": b["low"], "close": b["close"], "volume": b["volume"]}
+        for b in _BASE_BARS
+    ],
+}
+
+# IBKR: /iserver/marketdata/history -> { data: [...] }, t epoch ms, o/h/l/c/v.
+RAW_IBKR["historyData"] = {
+    "symbol": "AAPL",
+    "data": [
+        {"t": b["ms"], "o": b["open"], "h": b["high"], "l": b["low"], "c": b["close"], "v": b["volume"]}
+        for b in _BASE_BARS
+    ],
+}

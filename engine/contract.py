@@ -65,6 +65,18 @@ class Balance:
 
 
 @dataclass(frozen=True)
+class Candle:
+    """One OHLCV bar. Mirrors a /v1/markets/history "day" row."""
+
+    date: str  # YYYY-MM-DD
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+
+
+@dataclass(frozen=True)
 class OptionContract:
     """One option in a chain. Mirrors a /v1/markets/options/chains row."""
 
@@ -126,6 +138,8 @@ class BrokerAdapter(Protocol):
     def get_positions(self) -> List[Position]: ...
 
     def get_quotes(self, symbols: Sequence[str]) -> List[Quote]: ...
+
+    def get_candles(self, symbol: str) -> List[Candle]: ...
 
     def get_option_chain(
         self, underlying: str, expiration: str
