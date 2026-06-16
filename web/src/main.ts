@@ -5,7 +5,7 @@
 // No em dashes anywhere in this file.
 
 import "./theme.css";
-import { BROKERS } from "./fixtures";
+import { BROKERS, FEEDS } from "./fixtures";
 import { getAdapter, supportedBrokers } from "./adapters";
 import { avgPrice } from "./contract";
 import { runAlgo, trimCandidates } from "./algo";
@@ -297,6 +297,42 @@ function strategySection(): string {
   </section>`;
 }
 
+function feedsSection(): string {
+  const cards = FEEDS.map((meta) => {
+    const a = getAdapter(meta.key, meta.raw);
+    const q = a.getQuotes(["AAPL"])[0];
+    const candles = a.getCandles("AAPL");
+    const r = emaCrossover(candles);
+    const stanceColor = r.stance === "BULLISH" ? "var(--bull-bright)" : r.stance === "BEARISH" ? "var(--bear-bright)" : "var(--fg-3)";
+    return `
+      <div style="margin-bottom:1.4rem">
+        <div class="transformer">
+          <div class="card">
+            <div class="panel-label"><span class="tag-native">Native payload</span><span>${esc(meta.label)}</span></div>
+            <pre class="code">${renderJson(meta.raw)}</pre>
+          </div>
+          <div class="arrow-col"><span class="glyph">&#10142;</span></div>
+          <div class="card">
+            <div class="panel-label"><span class="tag-canon">Canonical (Tradier shape)</span><span>quotes + candles</span></div>
+            <pre class="code">${renderJson({ quote: q, candles })}</pre>
+          </div>
+        </div>
+        <div class="blurb"><b>${meta.label}:</b> ${esc(meta.blurb)} Maps to AAPL last ${q.last} / bid ${q.bid} / ask ${q.ask}, ${candles.length} canonical candles, momentum <span style="color:${stanceColor};font-weight:700">${r.stance}</span> (${r.crossType ?? "no"} cross). No accounts: a data feed, so balances, positions, and orders raise by design.</div>
+      </div>`;
+  }).join("");
+  return `
+  <section id="feeds">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Beyond brokers</div>
+        <h2>Market data feeds, the same Tradier shape.</h2>
+        <p>The contract is not just for brokers. massive.com (Polygon.io rebranded) and Databento are pure market-data feeds with no accounts. They map quotes and daily candles into the exact same canonical shapes, so Tradier becomes the market-data lingua franca too, not only the broker one. Databento is the most divergent source here: prices are int64 scaled by 1e-9 and symbols are numeric instrument ids. Both still collapse to the identical canonical quote and the identical 30-bar candle series the brokers produce.</p>
+      </div>
+      ${cards}
+    </div>
+  </section>`;
+}
+
 function onboardingSection(): string {
   const cards = PEOPLE.map((person) => {
     const meta = BROKERS.find((b) => b.key === person.broker)!;
@@ -356,7 +392,7 @@ function pipelineSection(): string {
 
 function featuresSection(): string {
   const feats = [
-    { ico: "&#128279;", h: "Six US brokers", p: "Tradier, tastytrade, Schwab, Alpaca, SnapTrade, IBKR. Equities and options. Shapes verified against each broker's official docs." },
+    { ico: "&#128279;", h: "Six brokers, plus data feeds", p: "Tradier, tastytrade, Schwab, Alpaca, SnapTrade, IBKR, plus market-data feeds massive.com and Databento on the quote and candle side. Shapes verified against each provider's official docs." },
     { ico: "&#9889;", h: "One file per broker", p: "Adding a broker is a single adapter mapping its native responses into the contract. Nothing downstream changes." },
     { ico: "&#129302;", h: "Agent-ready", p: "The canonical layer makes a Tradier-shaped MCP broker-agnostic. One tool vocabulary, every broker, every agent." },
     { ico: "&#128274;", h: "Read-first, preview-only", p: "Reads are the universal surface. Order placement previews by design. Live execution is opt-in per adapter and never automatic." },
@@ -386,6 +422,7 @@ function render() {
           <a href="#live">Live</a>
           <a href="#proof">Conformance</a>
           <a href="#strategy">Strategy</a>
+          <a href="#feeds">Feeds</a>
           <a href="#onboard">Onboard</a>
           <a href="#how">How</a>
           <a href="${REPO}">GitHub</a>
@@ -409,6 +446,7 @@ function render() {
     ${liveSection()}
     ${conformanceSection()}
     ${strategySection()}
+    ${feedsSection()}
     ${onboardingSection()}
     ${pipelineSection()}
     ${featuresSection()}

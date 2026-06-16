@@ -21,6 +21,17 @@ const f = (v: any): number | null => (v === null || v === undefined ? null : Num
 const i = (v: any): number | null => (v === null || v === undefined ? null : Math.trunc(Number(v)));
 // epoch ms -> YYYY-MM-DD
 const msDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+// Databento fixed-point: int64 scaled by 1e-9 -> real price.
+const dbPx = (v: any): number | null => (v === null || v === undefined ? null : Number(v) / 1e9);
+// Databento ns timestamp -> YYYY-MM-DD. ns exceeds JS safe-int range, but day
+// resolution survives: the rounding error is well under one second.
+const nsDate = (ns: any): string => new Date(Math.floor(Number(ns) / 1e9) * 1000).toISOString().slice(0, 10);
+
+// Data feeds are not brokers: they have no account surface, so the account
+// methods throw. Quotes and candles are the universal market-data surface.
+function noAccounts(name: string): Error {
+  return new Error(`${name} is a market data feed, not a broker: no accounts, positions, or orders. Use getQuotes / getCandles.`);
+}
 
 // --- Tradier: near identity map. The reference. -----------------------------
 class TradierAdapter implements BrokerAdapter {
@@ -377,6 +388,105 @@ class IBKRAdapter implements BrokerAdapter {
   }
 }
 
+// --- massive.com (Polygon.io rebranded): market DATA feed, no accounts. ------
+class MassiveAdapter implements BrokerAdapter {
+  name = "massive";
+  constructor(private raw: Raw) {}
+  getBalances(): Balance {
+    throw noAccounts("massive.com");
+  }
+  getPositions(): Position[] {
+    throw noAccounts("massive.com");
+  }
+  getQuotes(symbols: string[]): Quote[] {
+    const wanted = new Set(symbols.map((s) => s.toUpperCase()));
+    const t = this.raw.snapshot?.ticker;
+    if (!t || !wanted.has(String(t.ticker).toUpperCase())) return [];
+    const trade = t.lastTrade ?? {};
+    const quote = t.lastQuote ?? {};
+    const day = t.day ?? {};
+    return [
+      {
+        symbol: t.ticker,
+        description: null,
+        last: f(trade.p),
+        bid: f(quote.p), // lower-case p is the BID
+        ask: f(quote.P), // upper-case P is the ASK
+        volume: i(day.v),
+      },
+    ];
+  }
+  getCandles(_symbol: string): Candle[] {
+    // /v2/aggs: { results: [{t,o,h,l,c,v}] }, t in epoch ms.
+    return (this.raw.aggregates?.results ?? []).map((b: any) => ({
+      date: msDate(Number(b.t)),
+      open: Number(b.o),
+      high: Number(b.h),
+      low: Number(b.l),
+      close: Number(b.c),
+      volume: Number(b.v),
+    }));
+  }
+  previewOrder(_req: OrderRequest): Order {
+    throw noAccounts("massive.com");
+  }
+}
+
+// --- Databento: raw market data, int64 1e-9 prices, numeric instrument ids. --
+class DatabentoAdapter implements BrokerAdapter {
+  name = "databento";
+  constructor(private raw: Raw) {}
+  private symbology(): Record<number, string> {
+    const m: Record<number, string> = {};
+    for (const [k, v] of Object.entries<any>(this.raw.symbology ?? {})) m[Number(k)] = v;
+    return m;
+  }
+  getBalances(): Balance {
+    throw noAccounts("Databento");
+  }
+  getPositions(): Position[] {
+    throw noAccounts("Databento");
+  }
+  getQuotes(symbols: string[]): Quote[] {
+    const wanted = new Set(symbols.map((s) => s.toUpperCase()));
+    const symMap = this.symbology();
+    const vol: Record<number, any> = {};
+    for (const b of this.raw.ohlcv ?? []) vol[b.instrument_id] = b.volume;
+    const out: Quote[] = [];
+    for (const rec of this.raw.tbbo ?? []) {
+      const sym = symMap[rec.instrument_id];
+      if (!sym || !wanted.has(sym.toUpperCase())) continue;
+      out.push({
+        symbol: sym,
+        description: null,
+        last: dbPx(rec.price),
+        bid: dbPx(rec.bid_px_00),
+        ask: dbPx(rec.ask_px_00),
+        volume: i(vol[rec.instrument_id]),
+      });
+    }
+    return out;
+  }
+  getCandles(symbol: string): Candle[] {
+    const symMap = this.symbology();
+    let iid: number | null = null;
+    for (const [k, v] of Object.entries(symMap)) if (v.toUpperCase() === symbol.toUpperCase()) iid = Number(k);
+    return (this.raw.ohlcv ?? [])
+      .filter((b: any) => iid === null || b.instrument_id === iid)
+      .map((b: any) => ({
+        date: nsDate(b.ts_event),
+        open: dbPx(b.open)!,
+        high: dbPx(b.high)!,
+        low: dbPx(b.low)!,
+        close: dbPx(b.close)!,
+        volume: Number(b.volume),
+      }));
+  }
+  previewOrder(_req: OrderRequest): Order {
+    throw noAccounts("Databento");
+  }
+}
+
 type AdapterCtor = new (raw: Raw) => BrokerAdapter;
 
 export const REGISTRY: Record<string, AdapterCtor> = {
@@ -386,7 +496,12 @@ export const REGISTRY: Record<string, AdapterCtor> = {
   alpaca: AlpacaAdapter,
   schwab: SchwabAdapter,
   ibkr: IBKRAdapter,
+  massive: MassiveAdapter,
+  databento: DatabentoAdapter,
 };
+
+// Sources with no broker account surface (data feeds, not brokers).
+export const DATA_ONLY = new Set(["massive", "databento"]);
 
 export function getAdapter(name: string, raw: Raw): BrokerAdapter {
   const Ctor = REGISTRY[name.toLowerCase()];
@@ -394,6 +509,16 @@ export function getAdapter(name: string, raw: Raw): BrokerAdapter {
   return new Ctor(raw);
 }
 
+// Brokers only (full account surface). Account-driven UI iterates this, so it
+// never calls balances/positions on a data feed.
 export function supportedBrokers(): string[] {
-  return Object.keys(REGISTRY).sort();
+  return Object.keys(REGISTRY)
+    .filter((k) => !DATA_ONLY.has(k))
+    .sort();
+}
+
+export function dataFeeds(): string[] {
+  return Object.keys(REGISTRY)
+    .filter((k) => DATA_ONLY.has(k))
+    .sort();
 }

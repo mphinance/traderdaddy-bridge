@@ -31,6 +31,12 @@ An EMA 8 over EMA 21 momentum crossover. The math is Michael's mur quantlab: a P
 
 The contract covers balances, positions, quotes, AND daily candles. All of them normalize across brokers, so the strategy produces the same golden cross on Tradier, tastytrade, Schwab, Alpaca, and IBKR.
 
+## Beyond brokers: market data feeds
+
+The contract is clean enough that pure market-data vendors map into it too, not just brokers. **massive.com** (Polygon.io rebranded) and **databento** have no accounts, so they raise on balances/positions/orders and map only the market side: quotes, daily candles, and option chains (with Greeks where the feed carries them, `None` where it does not, as with Databento's raw market data). The point flows toward Tradier: its quote, candle, and chain shapes become the common vocabulary every data vendor speaks INTO. Tradier is the market-data lingua franca, not only the broker one, so any app coding against Tradier's shape can pull from any feed underneath without changing a line. The two feeds produce the identical 30-bar candle series and the identical AAPL 190 call as the brokers do.
+
+![Market data feeds](docs/feeds.png)
+
 ## Live, read-only
 
 The demo above runs on sample data. The Live panel reads a **real Tradier account** through the exact same canonical adapter: balances, positions, quotes, and candles, with the momentum signal computed on real history.
@@ -64,18 +70,18 @@ traderdaddy-bridge/
 ```
 
 ### The Python engine
-The source of truth. Canonical contract, six adapters, conformance tests, and two convert demos.
+The source of truth. Canonical contract, six broker adapters plus two market-data feeds (massive.com, databento), conformance tests, and two convert demos.
 
 ```bash
 # from the repo root
-python -m engine.demo_algo              # one algo, six brokers, identical result
+python -m engine.demo_algo              # one algo, six brokers, then two data feeds
 python -m engine.strategy               # EMA crossover, same signal every broker
 python -m engine.convert_onboarding     # five traders, five SDKs, all onboarded
-python engine/tests/test_conformance.py # 7/7: balances, positions, quotes, candles
+python engine/tests/test_conformance.py # 9/9: balances, positions, quotes, candles, chains
 ```
 
 ### The web demo
-The interactive, deployable face of it. The six adapters are ported to TypeScript and run client-side, so the transform you see is genuinely executing.
+The interactive, deployable face of it. The six broker adapters plus the two data feeds are ported to TypeScript and run client-side, so the transform you see is genuinely executing.
 
 ```bash
 cd web

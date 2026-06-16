@@ -10,12 +10,15 @@ No em dashes anywhere in this file.
 from __future__ import annotations
 
 from .alpaca import AlpacaAdapter
+from .databento import DatabentoAdapter
 from .ibkr import IBKRAdapter
+from .massive import MassiveAdapter
 from .schwab import SchwabAdapter
 from .snaptrade import SnapTradeAdapter
 from .tastytrade import TastytradeAdapter
 from .tradier_native import TradierAdapter
 
+# Brokers: full account surface (balances, positions, quotes, candles, orders).
 REGISTRY = {
     TradierAdapter.name: TradierAdapter,
     TastytradeAdapter.name: TastytradeAdapter,
@@ -23,7 +26,14 @@ REGISTRY = {
     AlpacaAdapter.name: AlpacaAdapter,
     SchwabAdapter.name: SchwabAdapter,
     IBKRAdapter.name: IBKRAdapter,
+    # Market data feeds: quotes + candles + option chains only, no accounts.
+    MassiveAdapter.name: MassiveAdapter,
+    DatabentoAdapter.name: DatabentoAdapter,
 }
+
+# Sources with no broker account surface (data feeds, not brokers). They satisfy
+# the market-data side of the contract and raise on balances/positions/orders.
+DATA_ONLY = {MassiveAdapter.name, DatabentoAdapter.name}
 
 
 def get_adapter(name: str, raw: dict):
