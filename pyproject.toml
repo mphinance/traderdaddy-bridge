@@ -1,0 +1,24 @@
+[project]
+name = "traderdaddy-bridge"
+version = "0.1.0"
+description = "Universal broker adapter: write an algo once against the Tradier shape, run it on any broker, and serve it to agents over a universal MCP server."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+# The engine/ reference and the stdio MCP server are pure stdlib. These deps are
+# only for the hosted half: the FastAPI read backend + the HTTP/SSE MCP server.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "fastmcp>=2.8",
+]
+
+[project.scripts]
+# Hosted: read backend + MCP over HTTP, one process.
+traderdaddy-bridge = "server.app:main"
+# Local: the universal MCP server over stdio, for `claude mcp add`.
+traderdaddy-mcp = "mcp_server.universal:main"
+
+[tool.setuptools]
+packages = ["engine", "engine.adapters", "server", "mcp_server"]
