@@ -49,11 +49,12 @@ The demo above runs on sample data. The Live panel reads a **real Tradier accoun
 
 ![Live read](docs/live-read.png)
 
-It runs against a small **local, read-only backend** (`server/`). Your token is read from the environment at runtime, never enters git, and the backend calls only Tradier read endpoints. `place_order` stays preview-only. See [server/README.md](server/README.md).
+It runs against a small **local, read-only backend** (`server/app.py`). Your token is read from the environment at runtime, never enters git, and the backend calls only Tradier read endpoints. `place_order` stays preview-only. The same process also serves the universal MCP server at `/mcp`. See [server/README.md](server/README.md).
 
 ```bash
-# terminal 1: the read-only backend (from repo root)
-BRIDGE_SECRETS=/path/to/secrets.env python -m server.live_tradier
+# terminal 1: the backend (read snapshot + universal MCP), from repo root
+pip install -e .   # one time: fastapi + uvicorn + fastmcp
+BRIDGE_SECRETS=/path/to/secrets.env python -m server.app
 # terminal 2: the web app, served locally so it can reach localhost
 cd web && npm run dev
 # open the local app, scroll to Live, click Connect
@@ -69,10 +70,11 @@ Other unified APIs (OpenAlgo for India, ccxt for crypto) map brokers into a deli
 
 ```
 traderdaddy-bridge/
-  engine/        Python reference engine (the canonical contract + 6 adapters + tests)
+  engine/        Python reference engine (the canonical contract + 6 adapters + tests). Pure stdlib.
   web/           Vite + TypeScript live demo (deployed to GitHub Pages)
-  server/        local read-only live Tradier backend (stdlib only)
-  docs/          screenshots
+  mcp_server/    universal MCP server: Tradier-MCP vocabulary on any broker (FastMCP, stdio + HTTP)
+  server/        FastAPI app: read-only Tradier snapshot + the MCP server over HTTP, one process
+  docs/          screenshots + ingested Tradier-MCP reference
 ```
 
 ### The Python engine
@@ -105,6 +107,10 @@ npm run build      # static build into web/dist
 ## The agentic angle
 
 Tradier ships an MCP server whose tools are shaped like its API, the exact shapes this layer targets. So the canonical layer makes a Tradier-shaped MCP broker-agnostic for free. Every algo written for Tradier runs on any broker (developer acquisition), and every agent speaking Tradier-MCP runs on any broker (the agentic-trading wave). One tool vocabulary, every broker.
+
+This is real, not just a thesis. **[`mcp_server/`](mcp_server/README.md) is a universal MCP server**, built on FastMCP: it exposes the Tradier-MCP tool vocabulary once (`get_balances`, `get_quotes`, `get_history`, `get_option_chain`, `place_order`) and routes every call through the canonical adapters. Point an MCP agent at it, ask for AAPL quotes, switch `BRIDGE_BROKER`, and ask again. The answer comes back in the identical shape on Tradier, tastytrade, Schwab, Alpaca, IBKR, or a pure data feed.
+
+One FastMCP definition, two transports: **stdio** for local Claude Code (`claude mcp add traderdaddy -- python -m mcp_server.universal`) and **HTTP/SSE** for hosting, served at `/mcp` by the same FastAPI process as the read backend (`python -m server.app`), the way Tradier ships its own MCP over HTTP. The ingested Tradier-MCP reference lives in [`docs/tradier-mcp.md`](docs/tradier-mcp.md). `place_order` previews by design.
 
 ## Honest status
 
